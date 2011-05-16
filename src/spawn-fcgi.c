@@ -222,7 +222,8 @@ static int fcgi_spawn_connection(char *appPath, char **appArgv, int fcgi_fd, int
 
 	pid_t child;
 
-	while (fork_count-- > 0) {
+  for( ;; ) {
+	while (fork_count > 0) {
 
 		if (!nofork) {
 			child = fork();
@@ -248,10 +249,7 @@ static int fcgi_spawn_connection(char *appPath, char **appArgv, int fcgi_fd, int
 				close(fcgi_fd);
 			}
 
-			/* loose control terminal */
 			if (!nofork) {
-				setsid();
-
 				max_fd = open("/dev/null", O_RDWR);
 				if (-1 != max_fd) {
 					if (max_fd != STDOUT_FILENO) dup2(max_fd, STDOUT_FILENO);
@@ -291,44 +289,27 @@ static int fcgi_spawn_connection(char *appPath, char **appArgv, int fcgi_fd, int
 			fprintf(stderr, "spawn-fcgi: fork failed: %s\n", strerror(errno));
 			break;
 		default:
-			/* father */
+			/* parent */
 
 			/* wait */
 			select(0, NULL, NULL, NULL, &tv);
 
 			switch (waitpid(child, &status, WNOHANG)) {
 			case 0:
-				fprintf(stdout, "spawn-fcgi: child spawned successfully: PID: %d\n", child);
-
-				/* write pid file */
-				if (pid_fd != -1) {
-					/* assume a 32bit pid_t */
-					char pidbuf[12];
-
-					snprintf(pidbuf, sizeof(pidbuf) - 1, "%d", child);
-
-					write(pid_fd, pidbuf, strlen(pidbuf));
-					/* avoid eol for the last one */
-					if (fork_count != 0) {
-						write(pid_fd, "\n", 1);
-					}
-				}
-
-				break;
+			  fork_count--;
+			  fprintf(stdout, "spawn-fcgi: child spawned successfully: PID: %d\n", child);
+			  break;
 			case -1:
-				break;
+			  break;
 			default:
 				if (WIFEXITED(status)) {
-					fprintf(stderr, "spawn-fcgi: child exited with: %d\n",
-						WEXITSTATUS(status));
+					fprintf(stderr, "spawn-fcgi: child exited with: %d\n", WEXITSTATUS(status));
 					rc = WEXITSTATUS(status);
 				} else if (WIFSIGNALED(status)) {
-					fprintf(stderr, "spawn-fcgi: child signaled: %d\n",
-						WTERMSIG(status));
+					fprintf(stderr, "spawn-fcgi: child signaled: %d\n", WTERMSIG(status));
 					rc = 1;
 				} else {
-					fprintf(stderr, "spawn-fcgi: child died somehow: exit status = %d\n",
-						status);
+					fprintf(stderr, "spawn-fcgi: child died somehow: exit status = %d\n", status);
 					rc = status;
 				}
 			}
@@ -336,11 +317,23 @@ static int fcgi_spawn_connection(char *appPath, char **appArgv, int fcgi_fd, int
 			break;
 		}
 	}
-	close(pid_fd);
+	child = waitpid( -1, &status, WNOHANG );
+	switch( child ) {
+	case 0:
+	  select(0, NULL, NULL, NULL, &tv);
+	  break;
+	default:
+	  /* one of the child exit, we should spawn a new one */
+	  fprintf(stderr, "child %d died somehow: exit status = %d\n", child, status);
+	  fork_count++;
+	  break;
+	}
+  }
+  close(pid_fd);
 
-	close(fcgi_fd);
+  close(fcgi_fd);
 
-	return rc;
+  return rc;
 }
 
 static int find_user_group(const char *user, const char *group, uid_t *uid, gid_t *gid, const char **username) {
