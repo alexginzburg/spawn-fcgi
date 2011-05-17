@@ -397,14 +397,16 @@ static int find_user_group(const char *user, const char *group, uid_t *uid, gid_
 }
 
 static void show_version () {
-	write(1, CONST_STR_LEN(
+  int rc;
+	rc = write(1, CONST_STR_LEN(
 		PACKAGE_DESC \
 		"Build-Date: " __DATE__ " " __TIME__ "\n"
 	));
 }
 
 static void show_help () {
-	write(1, CONST_STR_LEN(
+  int rc;
+	rc = write(1, CONST_STR_LEN(
 		"Usage: spawn-fcgi [options] [-- <fcgiapp> [fcgi app arguments]]\n" \
 		"\n" \
 		PACKAGE_DESC \
