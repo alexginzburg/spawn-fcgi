@@ -317,6 +317,7 @@ static int fcgi_spawn_connection(char *appPath, char **appArgv, int fcgi_fd, int
 			break;
 		}
 	}
+	tv.tv_usec = 500 * 1000;
 	child = waitpid( -1, &status, WNOHANG );
 	switch( child ) {
 	case 0:
