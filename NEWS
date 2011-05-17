@@ -3,6 +3,9 @@
 NEWS
 ====
 
+- 1.6.5 - 2011-05-15
+  * change the process management to actually monitor spawned processes.
+
 - 1.6.4 -
   * Use octal mode for -M (patch by dfjoerg)
 
