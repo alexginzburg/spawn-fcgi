@@ -216,7 +216,7 @@ static int bind_socket(const char *addr, unsigned short port, const char *unixso
 	return fcgi_fd;
 }
 
-static int fcgi_spawn_connection(char *appPath, char **appArgv, int fcgi_fd, int fork_count, int child_count, char *pid_dir, int nofork) {
+static int fcgi_spawn_connection(char **appArgv, int fcgi_fd, int fork_count, char *pid_dir, int nofork) {
 	int status, rc = 0;
 	struct timeval tv = { 0, 100 * 1000 };
 
@@ -234,17 +234,17 @@ static int fcgi_spawn_connection(char *appPath, char **appArgv, int fcgi_fd, int
 
 		switch (child) {
 		case 0: {
-			char cgi_childs[64];
             int fd = 0;
 
             if ( pid_dir ) {
-                tv.tv_sec=2;
-                select(0, NULL, NULL, NULL, &tv);
 
                 child = getpid();
+                if ( pid_dir ) {
+                    memset(path, '\0', 513);
+                    snprintf(path, 512, "%s/%d", pid_dir, child );
+                    mkfifo( path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP); 
+                }
 
-                memset(path, '\0', 513);
-                snprintf(path, 512, "%s/%d", pid_dir, child);
                 if ( (fd = open(path, O_RDONLY|O_NONBLOCK)) == -1 ) {
                     fprintf( stderr, "failed to open fifo %s %d", path, errno);
                     exit(errno);
@@ -277,11 +277,6 @@ static int fcgi_spawn_connection(char *appPath, char **appArgv, int fcgi_fd, int
 
 			/* wait */
 			select(0, NULL, NULL, NULL, &tv);
-	        if ( pid_dir ) {
-                memset(path, '\0', 513);
-                snprintf(path, 512, "%s/%d", pid_dir, child );
-                mkfifo( path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP); 
-            }
 
 			switch (waitpid(child, &status, WNOHANG)) {
 			case 0:
@@ -291,10 +286,6 @@ static int fcgi_spawn_connection(char *appPath, char **appArgv, int fcgi_fd, int
 			case -1:
 			  break;
 			default:
-                /* removing the fifo */
-                if ( unlink(path) != 0 ) {
-                    fprintf( stderr, "failed to unlink %s %d", path, errno );
-                }
 				if (WIFEXITED(status)) {
 					fprintf(stderr, "spawn-fcgi: child exited with: %d\n", WEXITSTATUS(status));
 					rc = WEXITSTATUS(status);
@@ -439,7 +430,7 @@ static void show_help () {
 
 
 int main(int argc, char **argv) {
-	char *fcgi_app = NULL, *changeroot = NULL, *username = NULL,
+	char *changeroot = NULL, *username = NULL,
 	     *groupname = NULL, *unixsocket = NULL, *pid_dir = NULL,
 	     *sockusername = NULL, *sockgroupname = NULL, *fcgi_dir = NULL,
 	     *addr = NULL;
@@ -447,7 +438,6 @@ int main(int argc, char **argv) {
 	char *endptr = NULL;
 	unsigned short port = 0;
 	int sockmode = -1;
-	int child_count = -1;
 	int fork_count = 1;
 	int i_am_root, o;
 	int nofork = 0;
@@ -462,9 +452,8 @@ int main(int argc, char **argv) {
 
 	i_am_root = (getuid() == 0);
 
-	while (-1 != (o = getopt(argc, argv, "c:d:f:g:?hna:p:u:vC:F:s:P:U:G:M:S"))) {
+	while (-1 != (o = getopt(argc, argv, "c:d:g:?hna:p:u:vF:s:P:U:G:M:S"))) {
 		switch(o) {
-		case 'f': fcgi_app = optarg; break;
 		case 'd': fcgi_dir = optarg; break;
 		case 'a': addr = optarg;/* ip addr */ break;
 		case 'p': port = strtol(optarg, &endptr, 10);/* port */
@@ -473,7 +462,6 @@ int main(int argc, char **argv) {
 				return -1;
 			}
 			break;
-		case 'C': child_count = strtol(optarg, NULL, 10);/*  */ break;
 		case 'F': fork_count = strtol(optarg, NULL, 10);/*  */ break;
 		case 's': unixsocket = optarg; /* unix-domain socket */ break;
 		case 'c': if (i_am_root) { changeroot = optarg; }/* chroot() */ break;
@@ -498,7 +486,7 @@ int main(int argc, char **argv) {
 		fcgi_app_argv = &argv[optind];
 	}
 
-	if (NULL == fcgi_app && NULL == fcgi_app_argv) {
+	if (NULL == fcgi_app_argv) {
 		fprintf(stderr, "spawn-fcgi: no FastCGI application given\n");
 		return -1;
 	}
@@ -585,5 +573,5 @@ int main(int argc, char **argv) {
 		return -1;
 	}
 
-	return fcgi_spawn_connection(fcgi_app, fcgi_app_argv, fcgi_fd, fork_count, child_count, pid_dir, nofork);
+	return fcgi_spawn_connection(fcgi_app_argv, fcgi_fd, fork_count, pid_dir, nofork);
 }
