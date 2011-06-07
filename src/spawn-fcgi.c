@@ -226,10 +226,10 @@ static int fcgi_spawn_connection(char **appArgv, int fcgi_fd, int fork_count, ch
   for( ;; ) {
 	while (fork_count > 0) {
 
-		if (!nofork) {
-			child = fork();
-		} else {
+		if (nofork) {
 			child = 0;
+		} else {
+			child = fork();
 		}
 
 		switch (child) {
@@ -312,12 +312,9 @@ static int fcgi_spawn_connection(char **appArgv, int fcgi_fd, int fork_count, ch
 			break;
 		}
 	}
-    tv.tv_sec = 2;
-	tv.tv_usec = 500 * 1000;
-	child = waitpid( -1, &status, WNOHANG );
+	child = wait( &status );
 	switch( child ) {
 	case 0:
-	  select(0, NULL, NULL, NULL, &tv);
 	  break;
 	default:
 	  /* one of the child exit, we should spawn a new one */
