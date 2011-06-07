@@ -75,7 +75,7 @@ static int issetugid() {
 #define PACKAGE_FEATURES ""
 #endif
 
-#define PACKAGE_DESC "spawn-fcgi v" PACKAGE_VERSION PACKAGE_FEATURES " - spawns FastCGI processes\n"
+#define PACKAGE_DESC "tcpipc-prefork v" PACKAGE_VERSION PACKAGE_FEATURES " - listens on a TCP or IPC socket, spawns processes\n"
 
 #define CONST_STR_LEN(s) s, sizeof(s) - 1
 
@@ -225,6 +225,8 @@ static int fcgi_spawn_connection(char *appPath, char **appArgv, int fcgi_fd, int
   for( ;; ) {
 	while (fork_count > 0) {
 
+		
+
 		if (!nofork) {
 			child = fork();
 		} else {
@@ -249,22 +251,6 @@ static int fcgi_spawn_connection(char *appPath, char **appArgv, int fcgi_fd, int
 				close(fcgi_fd);
 			}
 
-			if (!nofork) {
-				max_fd = open("/dev/null", O_RDWR);
-				if (-1 != max_fd) {
-					if (max_fd != STDOUT_FILENO) dup2(max_fd, STDOUT_FILENO);
-					if (max_fd != STDERR_FILENO) dup2(max_fd, STDERR_FILENO);
-					if (max_fd != STDOUT_FILENO && max_fd != STDERR_FILENO) close(max_fd);
-				} else {
-					fprintf(stderr, "spawn-fcgi: couldn't open and redirect stdout/stderr to '/dev/null': %s\n", strerror(errno));
-				}
-			}
-
-			/* we don't need the client socket */
-			for (i = 3; i < max_fd; i++) {
-				if (i != FCGI_LISTENSOCK_FILENO) close(i);
-			}
-
 			/* fork and replace shell */
 			if (appArgv) {
 				execv(appArgv[0], appArgv);
@@ -282,7 +268,6 @@ static int fcgi_spawn_connection(char *appPath, char **appArgv, int fcgi_fd, int
 			fprintf(stderr, "spawn-fcgi: exec failed: %s\n", strerror(errno));
 			exit(errno);
 
-			break;
 		}
 		case -1:
 			/* error */
@@ -317,6 +302,7 @@ static int fcgi_spawn_connection(char *appPath, char **appArgv, int fcgi_fd, int
 			break;
 		}
 	}
+	tv.tv_sec = 2;
 	tv.tv_usec = 500 * 1000;
 	child = waitpid( -1, &status, WNOHANG );
 	switch( child ) {
@@ -427,15 +413,6 @@ static void show_help () {
 		" -n             no fork (for daemontools)\n" \
 		" -v             show version\n" \
 		" -?, -h         show this help\n" \
-		"(root only)\n" \
-		" -c <directory> chroot to directory\n" \
-		" -S             create socket before chroot() (default is to create the socket\n" \
-		"                in the chroot)\n" \
-		" -u <user>      change to user-id\n" \
-		" -g <group>     change to group-id (default: primary group of user if -u\n" \
-		"                is given)\n" \
-		" -U <user>      change Unix domain socket owner to user-id\n" \
-		" -G <group>     change Unix domain socket group to group-id\n" \
 	));
 }
 
@@ -451,19 +428,23 @@ int main(int argc, char **argv) {
 	int sockmode = -1;
 	int child_count = -1;
 	int fork_count = 1;
-	int i_am_root, o;
 	int pid_fd = -1;
 	int nofork = 0;
 	int sockbeforechroot = 0;
 	struct sockaddr_un un;
 	int fcgi_fd = -1;
+	int o;
 
 	if (argc < 2) { /* no arguments given */
 		show_help();
 		return -1;
 	}
 
-	i_am_root = (getuid() == 0);
+	/* I am root */
+	if ( getuid() == 0 ) {
+		fprintf(stderr, "tcp-ipc-prefork: This is not an init process, no need to be root. Exiting ...\n");
+		exit(-1);
+	}
 
 	while (-1 != (o = getopt(argc, argv, "c:d:f:g:?hna:p:u:vC:F:s:P:U:G:M:S"))) {
 		switch(o) {
@@ -479,15 +460,8 @@ int main(int argc, char **argv) {
 		case 'C': child_count = strtol(optarg, NULL, 10);/*  */ break;
 		case 'F': fork_count = strtol(optarg, NULL, 10);/*  */ break;
 		case 's': unixsocket = optarg; /* unix-domain socket */ break;
-		case 'c': if (i_am_root) { changeroot = optarg; }/* chroot() */ break;
-		case 'u': if (i_am_root) { username = optarg; } /* set user */ break;
-		case 'g': if (i_am_root) { groupname = optarg; } /* set group */ break;
-		case 'U': if (i_am_root) { sockusername = optarg; } /* set socket user */ break;
-		case 'G': if (i_am_root) { sockgroupname = optarg; } /* set socket group */ break;
-		case 'S': if (i_am_root) { sockbeforechroot = 1; } /* open socket before chroot() */ break;
 		case 'M': sockmode = strtol(optarg, NULL, 8); /* set socket mode */ break;
 		case 'n': nofork = 1; break;
-		case 'P': pid_file = optarg; /* PID file */ break;
 		case 'v': show_version(); return 0;
 		case '?':
 		case 'h': show_help(); return 0;
@@ -519,12 +493,6 @@ int main(int argc, char **argv) {
 		return -1;
 	}
 
-	/* SUID handling */
-	if (!i_am_root && issetugid()) {
-		fprintf(stderr, "spawn-fcgi: Are you nuts? Don't apply a SUID bit to this binary\n");
-		return -1;
-	}
-
 	if (nofork) pid_file = NULL; /* ignore pid file in no-fork mode */
 
 	if (pid_file &&
@@ -537,7 +505,6 @@ int main(int argc, char **argv) {
 		}
 
 		/* ok, file exists */
-
 		if (0 != stat(pid_file, &st)) {
 			fprintf(stderr, "spawn-fcgi: stating PID-file '%s' failed: %s\n",
 				pid_file, strerror(errno));
@@ -545,7 +512,6 @@ int main(int argc, char **argv) {
 		}
 
 		/* is it a regular file ? */
-
 		if (!S_ISREG(st.st_mode)) {
 			fprintf(stderr, "spawn-fcgi: PID-file exists and isn't regular file: '%s'\n",
 				pid_file);
@@ -559,60 +525,8 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	if (i_am_root) {
-		uid_t uid, sockuid;
-		gid_t gid, sockgid;
-		const char* real_username;
-
-		if (-1 == find_user_group(username, groupname, &uid, &gid, &real_username))
-			return -1;
-
-		if (-1 == find_user_group(sockusername, sockgroupname, &sockuid, &sockgid, NULL))
-			return -1;
-
-		if (uid != 0 && gid == 0) {
-			fprintf(stderr, "spawn-fcgi: WARNING: couldn't find the user for uid %i and no group was specified, so only the user privileges will be dropped\n", (int) uid);
-		}
-
-		if (0 == sockuid) sockuid = uid;
-		if (0 == sockgid) sockgid = gid;
-
-		if (sockbeforechroot && -1 == (fcgi_fd = bind_socket(addr, port, unixsocket, sockuid, sockgid, sockmode)))
-			return -1;
-
-		/* Change group before chroot, when we have access
-		 * to /etc/group
-		 */
-		if (gid != 0) {
-			setgid(gid);
-			setgroups(0, NULL);
-			if (real_username) {
-				initgroups(real_username, gid);
-			}
-		}
-
-		if (changeroot) {
-			if (-1 == chroot(changeroot)) {
-				fprintf(stderr, "spawn-fcgi: chroot('%s') failed: %s\n", changeroot, strerror(errno));
-				return -1;
-			}
-			if (-1 == chdir("/")) {
-				fprintf(stderr, "spawn-fcgi: chdir('/') failed: %s\n", strerror(errno));
-				return -1;
-			}
-		}
-
-		if (!sockbeforechroot && -1 == (fcgi_fd = bind_socket(addr, port, unixsocket, sockuid, sockgid, sockmode)))
-			return -1;
-
-		/* drop root privs */
-		if (uid != 0) {
-			setuid(uid);
-		}
-	} else {
-		if (-1 == (fcgi_fd = bind_socket(addr, port, unixsocket, 0, 0, sockmode)))
-			return -1;
-	}
+	if (-1 == (fcgi_fd = bind_socket(addr, port, unixsocket, 0, 0, sockmode)))
+		return -1;
 
 	if (fcgi_dir && -1 == chdir(fcgi_dir)) {
 		fprintf(stderr, "spawn-fcgi: chdir('%s') failed: %s\n", fcgi_dir, strerror(errno));
