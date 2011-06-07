@@ -249,8 +249,19 @@ static int fcgi_spawn_connection(char **appArgv, int fcgi_fd, int fork_count, ch
                     fprintf( stderr, "failed to open fifo %s %d", path, errno);
                     exit(errno);
                 }
-                /* reassigning to file descriptor 3 */
+
+                /* reassigning to file descriptor 11 */
                 dup2(fd, 11);
+                if ( fd ) close(fd);
+
+                /* write side of the pipe */
+                if ( (fd = open(path, O_WRONLY|O_NONBLOCK)) == -1 ) {
+                    fprintf( stderr, "failed to open fifo %s %d", path, errno);
+                    exit(errno);
+                }
+
+                /* reassigning to file descriptor 12 */
+                dup2(fd, 12);
                 if ( fd ) close(fd);
             }
             
