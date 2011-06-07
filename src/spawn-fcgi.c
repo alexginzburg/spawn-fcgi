@@ -402,15 +402,11 @@ static void show_help () {
 		PACKAGE_DESC \
 		"\n" \
 		"Options:\n" \
-		" -f <path>      filename of the fcgi-application (deprecated; ignored if\n" \
-		"                <fcgiapp> is given; needs /bin/sh)\n" \
 		" -d <directory> chdir to directory before spawning\n" \
 		" -a <address>   bind to IPv4/IPv6 address (defaults to 0.0.0.0)\n" \
 		" -p <port>      bind to TCP-port\n" \
 		" -s <path>      bind to Unix domain socket\n" \
 		" -M <mode>      change Unix domain socket mode\n" \
-		" -C <children>  (PHP only) numbers of childs to spawn (default: not setting\n" \
-		"                the PHP_FCGI_CHILDREN environment variable - PHP defaults to 0)\n" \
 		" -F <children>  number of children to fork (default 1)\n" \
 		" -P <path>      name of directory contaning FIFOs for each spawned process\n" \
 		" -n             no fork\n" \
@@ -491,6 +487,11 @@ int main(int argc, char **argv) {
 		return -1;
 	}
 
+    if ( pid_dir && (strlen(pid_dir) + sizeof(pid_t)) > 512 ) {
+        fprintf( stderr, "path to a pid directory + pid size exceeds 512 bytes, bailing out\n" );
+        return -1;
+    }
+
 	if (0 == port && NULL == unixsocket) {
 		fprintf(stderr, "spawn-fcgi: no socket given (use either -p or -s)\n");
 		return -1;
@@ -509,9 +510,6 @@ int main(int argc, char **argv) {
 		fprintf(stderr, "spawn-fcgi: Are you nuts? Don't apply a SUID bit to this binary\n");
 		return -1;
 	}
-
-	if (nofork) pid_dir = NULL; /* ignore pid file in no-fork mode */
-
 
 	if (i_am_root) {
 		uid_t uid, sockuid;
