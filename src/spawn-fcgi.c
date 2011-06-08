@@ -229,10 +229,12 @@ void cleanup_n_leave( int sig ) {
 
     for( ;; ) {
 	    if ( (child = wait( &status )) > 0 ) {
-            memset(path, '\0', 513);
-            snprintf(path, 512, "%s/%d", pid_dir, child);
-            if ( unlink(path) != 0 ) {
-                fprintf( stderr, "failed to unlink %s %d", path, errno );
+            if ( pid_dir ) {
+                memset(path, '\0', 513);
+                snprintf(path, 512, "%s/%d", pid_dir, child);
+                if ( unlink(path) != 0 ) {
+                    fprintf( stderr, "failed to unlink %s %d", path, errno );
+                }
             }
 	    } else {
             if ( errno == ECHILD ) exit(sig);
