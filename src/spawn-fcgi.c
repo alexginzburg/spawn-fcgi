@@ -12,6 +12,8 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <signal.h>
+#include <dirent.h>
 
 #ifdef HAVE_PWD_H
 # include <grp.h>
@@ -78,6 +80,10 @@ static int issetugid() {
 #define PACKAGE_DESC "spawn-fcgi v" PACKAGE_VERSION PACKAGE_FEATURES " - spawns FastCGI processes\n"
 
 #define CONST_STR_LEN(s) s, sizeof(s) - 1
+
+char *pid_dir = NULL;
+
+void cleanup_n_leave(int);
 
 static int bind_socket(const char *addr, unsigned short port, const char *unixsocket, uid_t uid, gid_t gid, int mode) {
 	int fcgi_fd, socket_type, val;
@@ -216,7 +222,25 @@ static int bind_socket(const char *addr, unsigned short port, const char *unixso
 	return fcgi_fd;
 }
 
-static int fcgi_spawn_connection(char **appArgv, int fcgi_fd, int fork_count, char *pid_dir, int nofork) {
+void cleanup_n_leave( int sig ) {
+    int status = 0;
+    char path[513];
+    pid_t child;
+
+    for( ;; ) {
+	    if ( (child = wait( &status )) > 0 ) {
+            memset(path, '\0', 513);
+            snprintf(path, 512, "%s/%d", pid_dir, child);
+            if ( unlink(path) != 0 ) {
+                fprintf( stderr, "failed to unlink %s %d", path, errno );
+            }
+	    } else {
+            if ( errno == ECHILD ) exit(sig);
+        }
+    }
+}
+
+static int fcgi_spawn_connection(char **appArgv, int fcgi_fd, int fork_count, int nofork) {
 	int status, rc = 0;
 	struct timeval tv = { 0, 100 * 1000 };
 
@@ -435,7 +459,7 @@ static void show_help () {
 
 int main(int argc, char **argv) {
 	char *changeroot = NULL, *username = NULL,
-	     *groupname = NULL, *unixsocket = NULL, *pid_dir = NULL,
+	     *groupname = NULL, *unixsocket = NULL,
 	     *sockusername = NULL, *sockgroupname = NULL, *fcgi_dir = NULL,
 	     *addr = NULL;
 	char **fcgi_app_argv = { NULL };
@@ -495,9 +519,39 @@ int main(int argc, char **argv) {
 		return -1;
 	}
 
+    /* sizeof(pid_t) does not really give us what we need... */
     if ( pid_dir && (strlen(pid_dir) + sizeof(pid_t)) > 512 ) {
         fprintf( stderr, "path to a pid directory + pid size exceeds 512 bytes, bailing out\n" );
         return -1;
+    }
+
+    if ( pid_dir ) {
+        DIR *dp;
+        struct dirent *ep;
+        char rpath[1024];
+
+        dp = opendir(pid_dir);
+        if ( dp ) {
+            while ( (ep = readdir(dp)) ) {
+                if ( ep->d_name[0] == '.' ) continue;
+                memset(rpath, '\0', 1024);
+                snprintf(rpath, 1023, "%s/%s", pid_dir, ep->d_name);
+                if ( -1 == unlink(rpath) ) {
+                    switch( errno ) {
+                    case ENOENT:
+                        break;
+                    default:
+                        fprintf( stderr, "failed to remove %s\n", ep->d_name );
+                        (void) closedir(dp);
+                        return -1;
+                    }
+                }
+            }
+            (void) closedir(dp);
+        } else {
+            fprintf( stderr, "cannot open %s\n", pid_dir ); 
+            return -1;
+        }
     }
 
 	if (0 == port && NULL == unixsocket) {
@@ -579,5 +633,9 @@ int main(int argc, char **argv) {
 		return -1;
 	}
 
-	return fcgi_spawn_connection(fcgi_app_argv, fcgi_fd, fork_count, pid_dir, nofork);
+    signal(SIGTERM, cleanup_n_leave);
+    signal(SIGINT, cleanup_n_leave);
+    signal(SIGABRT, cleanup_n_leave);
+
+	return fcgi_spawn_connection(fcgi_app_argv, fcgi_fd, fork_count, nofork);
 }
