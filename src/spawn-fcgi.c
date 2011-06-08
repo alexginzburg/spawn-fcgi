@@ -227,6 +227,11 @@ void cleanup_n_leave( int sig ) {
     char path[513];
     pid_t child;
 
+    if ( (kill(0, sig)) != 0 ) {
+        fprintf( stderr, "Unable to send kill %d to all processes within my process group\n", sig);
+        exit(111);
+    }
+
     for( ;; ) {
 	    if ( (child = wait( &status )) > 0 ) {
             if ( pid_dir ) {
