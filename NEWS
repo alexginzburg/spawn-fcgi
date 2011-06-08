@@ -3,6 +3,9 @@
 NEWS
 ====
 
+- 1.6.6
+  * forking the project even further. Remove permission handling from the program, it is better handled outside by setuidgid or such.
+
 - 1.6.5 - 2011-05-15
   * change the process management to actually monitor spawned processes.
 

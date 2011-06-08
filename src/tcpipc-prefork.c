@@ -110,12 +110,12 @@ static int bind_socket(const char *addr, unsigned short port, const char *unixso
 		 * as if we delete the socket-file and rebind there will be no "socket already in use" error
 		 */
 		if (-1 == (fcgi_fd = socket(socket_type, SOCK_STREAM, 0))) {
-			fprintf(stderr, "spawn-fcgi: couldn't create socket: %s\n", strerror(errno));
+			fprintf(stderr, "tcpipc-prefork: couldn't create socket: %s\n", strerror(errno));
 			return -1;
 		}
 
 		if (0 == connect(fcgi_fd, fcgi_addr, servlen)) {
-			fprintf(stderr, "spawn-fcgi: socket is already in use, can't spawn\n");
+			fprintf(stderr, "tcpipc-prefork: socket is already in use, can't spawn\n");
 			close(fcgi_fd);
 			return -1;
 		}
@@ -126,7 +126,7 @@ static int bind_socket(const char *addr, unsigned short port, const char *unixso
 			case ENOENT:
 				break;
 			default:
-				fprintf(stderr, "spawn-fcgi: removing old socket failed: %s\n", strerror(errno));
+				fprintf(stderr, "tcpipc-prefork: removing old socket failed: %s\n", strerror(errno));
 				return -1;
 			}
 		}
@@ -159,12 +159,12 @@ static int bind_socket(const char *addr, unsigned short port, const char *unixso
 			fcgi_addr = (struct sockaddr *) &fcgi_addr_in6;
 #endif
 		} else {
-			fprintf(stderr, "spawn-fcgi: '%s' is not a valid IP address\n", addr);
+			fprintf(stderr, "tcpipc-prefork: '%s' is not a valid IP address\n", addr);
 			return -1;
 #else
 		} else {
 			if ((in_addr_t)(-1) == (fcgi_addr_in.sin_addr.s_addr = inet_addr(addr))) {
-				fprintf(stderr, "spawn-fcgi: '%s' is not a valid IPv4 address\n", addr);
+				fprintf(stderr, "tcpipc-prefork: '%s' is not a valid IPv4 address\n", addr);
 				return -1;
 			}
 #endif
@@ -173,18 +173,18 @@ static int bind_socket(const char *addr, unsigned short port, const char *unixso
 
 
 	if (-1 == (fcgi_fd = socket(socket_type, SOCK_STREAM, 0))) {
-		fprintf(stderr, "spawn-fcgi: couldn't create socket: %s\n", strerror(errno));
+		fprintf(stderr, "tcpipc-prefork: couldn't create socket: %s\n", strerror(errno));
 		return -1;
 	}
 
 	val = 1;
 	if (setsockopt(fcgi_fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val)) < 0) {
-		fprintf(stderr, "spawn-fcgi: couldn't set SO_REUSEADDR: %s\n", strerror(errno));
+		fprintf(stderr, "tcpipc-prefork: couldn't set SO_REUSEADDR: %s\n", strerror(errno));
 		return -1;
 	}
 
 	if (-1 == bind(fcgi_fd, fcgi_addr, servlen)) {
-		fprintf(stderr, "spawn-fcgi: bind failed: %s\n", strerror(errno));
+		fprintf(stderr, "tcpipc-prefork: bind failed: %s\n", strerror(errno));
 		return -1;
 	}
 
@@ -193,7 +193,7 @@ static int bind_socket(const char *addr, unsigned short port, const char *unixso
 			if (0 == uid) uid = -1;
 			if (0 == gid) gid = -1;
 			if (-1 == chown(unixsocket, uid, gid)) {
-				fprintf(stderr, "spawn-fcgi: couldn't chown socket: %s\n", strerror(errno));
+				fprintf(stderr, "tcpipc-prefork: couldn't chown socket: %s\n", strerror(errno));
 				close(fcgi_fd);
 				unlink(unixsocket);
 				return -1;
@@ -201,7 +201,7 @@ static int bind_socket(const char *addr, unsigned short port, const char *unixso
 		}
 
 		if (-1 != mode && -1 == chmod(unixsocket, mode)) {
-			fprintf(stderr, "spawn-fcgi: couldn't chmod socket: %s\n", strerror(errno));
+			fprintf(stderr, "tcpipc-prefork: couldn't chmod socket: %s\n", strerror(errno));
 			close(fcgi_fd);
 			unlink(unixsocket);
 			return -1;
@@ -209,7 +209,7 @@ static int bind_socket(const char *addr, unsigned short port, const char *unixso
 	}
 
 	if (-1 == listen(fcgi_fd, 1024)) {
-		fprintf(stderr, "spawn-fcgi: listen failed: %s\n", strerror(errno));
+		fprintf(stderr, "tcpipc-prefork: listen failed: %s\n", strerror(errno));
 		return -1;
 	}
 
@@ -265,13 +265,13 @@ static int fcgi_spawn_connection(char *appPath, char **appArgv, int fcgi_fd, int
 			}
 
 			/* in nofork mode stderr is still open */
-			fprintf(stderr, "spawn-fcgi: exec failed: %s\n", strerror(errno));
+			fprintf(stderr, "tcpipc-prefork: exec failed: %s\n", strerror(errno));
 			exit(errno);
 
 		}
 		case -1:
 			/* error */
-			fprintf(stderr, "spawn-fcgi: fork failed: %s\n", strerror(errno));
+			fprintf(stderr, "tcpipc-prefork: fork failed: %s\n", strerror(errno));
 			break;
 		default:
 			/* parent */
@@ -282,19 +282,19 @@ static int fcgi_spawn_connection(char *appPath, char **appArgv, int fcgi_fd, int
 			switch (waitpid(child, &status, WNOHANG)) {
 			case 0:
 			  fork_count--;
-			  fprintf(stdout, "spawn-fcgi: child spawned successfully: PID: %d\n", child);
+			  fprintf(stdout, "tcpipc-prefork: child spawned successfully: PID: %d\n", child);
 			  break;
 			case -1:
 			  break;
 			default:
 				if (WIFEXITED(status)) {
-					fprintf(stderr, "spawn-fcgi: child exited with: %d\n", WEXITSTATUS(status));
+					fprintf(stderr, "tcpipc-prefork: child exited with: %d\n", WEXITSTATUS(status));
 					rc = WEXITSTATUS(status);
 				} else if (WIFSIGNALED(status)) {
-					fprintf(stderr, "spawn-fcgi: child signaled: %d\n", WTERMSIG(status));
+					fprintf(stderr, "tcpipc-prefork: child signaled: %d\n", WTERMSIG(status));
 					rc = 1;
 				} else {
-					fprintf(stderr, "spawn-fcgi: child died somehow: exit status = %d\n", status);
+					fprintf(stderr, "tcpipc-prefork: child died somehow: exit status = %d\n", status);
 					rc = status;
 				}
 			}
@@ -337,13 +337,13 @@ static int find_user_group(const char *user, const char *group, uid_t *uid, gid_
 
 		if (my_uid <= 0 || *endptr) {
 			if (NULL == (my_pwd = getpwnam(user))) {
-				fprintf(stderr, "spawn-fcgi: can't find user name %s\n", user);
+				fprintf(stderr, "tcpipc-prefork: can't find user name %s\n", user);
 				return -1;
 			}
 			my_uid = my_pwd->pw_uid;
 
 			if (my_uid == 0) {
-				fprintf(stderr, "spawn-fcgi: I will not set uid to 0\n");
+				fprintf(stderr, "tcpipc-prefork: I will not set uid to 0\n");
 				return -1;
 			}
 
@@ -359,13 +359,13 @@ static int find_user_group(const char *user, const char *group, uid_t *uid, gid_
 
 		if (my_gid <= 0 || *endptr) {
 			if (NULL == (my_grp = getgrnam(group))) {
-				fprintf(stderr, "spawn-fcgi: can't find group name %s\n", group);
+				fprintf(stderr, "tcpipc-prefork: can't find group name %s\n", group);
 				return -1;
 			}
 			my_gid = my_grp->gr_gid;
 
 			if (my_gid == 0) {
-				fprintf(stderr, "spawn-fcgi: I will not set gid to 0\n");
+				fprintf(stderr, "tcpipc-prefork: I will not set gid to 0\n");
 				return -1;
 			}
 		}
@@ -373,7 +373,7 @@ static int find_user_group(const char *user, const char *group, uid_t *uid, gid_
 		my_gid = my_pwd->pw_gid;
 
 		if (my_gid == 0) {
-			fprintf(stderr, "spawn-fcgi: I will not set gid to 0\n");
+			fprintf(stderr, "tcpipc-prefork: I will not set gid to 0\n");
 			return -1;
 		}
 	}
@@ -394,7 +394,7 @@ static void show_version () {
 static void show_help () {
   int rc;
 	rc = write(1, CONST_STR_LEN(
-		"Usage: spawn-fcgi [options] [-- <fcgiapp> [fcgi app arguments]]\n" \
+		"Usage: tcpipc-prefork [options] [-- <fcgiapp> [fcgi app arguments]]\n" \
 		"\n" \
 		PACKAGE_DESC \
 		"\n" \
@@ -442,7 +442,7 @@ int main(int argc, char **argv) {
 
 	/* I am root */
 	if ( getuid() == 0 ) {
-		fprintf(stderr, "tcp-ipc-prefork: This is not an init process, no need to be root. Exiting ...\n");
+		fprintf(stderr, "tcpipc-prefork: This is not an init process, no need to be root. Exiting ...\n");
 		exit(-1);
 	}
 
@@ -453,7 +453,7 @@ int main(int argc, char **argv) {
 		case 'a': addr = optarg;/* ip addr */ break;
 		case 'p': port = strtol(optarg, &endptr, 10);/* port */
 			if (*endptr) {
-				fprintf(stderr, "spawn-fcgi: invalid port: %u\n", (unsigned int) port);
+				fprintf(stderr, "tcpipc-prefork: invalid port: %u\n", (unsigned int) port);
 				return -1;
 			}
 			break;
@@ -476,20 +476,20 @@ int main(int argc, char **argv) {
 	}
 
 	if (NULL == fcgi_app && NULL == fcgi_app_argv) {
-		fprintf(stderr, "spawn-fcgi: no FastCGI application given\n");
+		fprintf(stderr, "tcpipc-prefork: no FastCGI application given\n");
 		return -1;
 	}
 
 	if (0 == port && NULL == unixsocket) {
-		fprintf(stderr, "spawn-fcgi: no socket given (use either -p or -s)\n");
+		fprintf(stderr, "tcpipc-prefork: no socket given (use either -p or -s)\n");
 		return -1;
 	} else if (0 != port && NULL != unixsocket) {
-		fprintf(stderr, "spawn-fcgi: either a Unix domain socket or a TCP-port, but not both\n");
+		fprintf(stderr, "tcpipc-prefork: either a Unix domain socket or a TCP-port, but not both\n");
 		return -1;
 	}
 
 	if (unixsocket && strlen(unixsocket) > sizeof(un.sun_path) - 1) {
-		fprintf(stderr, "spawn-fcgi: path of the Unix domain socket is too long\n");
+		fprintf(stderr, "tcpipc-prefork: path of the Unix domain socket is too long\n");
 		return -1;
 	}
 
@@ -499,27 +499,27 @@ int main(int argc, char **argv) {
 	    (-1 == (pid_fd = open(pid_file, O_WRONLY | O_CREAT | O_EXCL | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)))) {
 		struct stat st;
 		if (errno != EEXIST) {
-			fprintf(stderr, "spawn-fcgi: opening PID-file '%s' failed: %s\n",
+			fprintf(stderr, "tcpipc-prefork: opening PID-file '%s' failed: %s\n",
 				pid_file, strerror(errno));
 			return -1;
 		}
 
 		/* ok, file exists */
 		if (0 != stat(pid_file, &st)) {
-			fprintf(stderr, "spawn-fcgi: stating PID-file '%s' failed: %s\n",
+			fprintf(stderr, "tcpipc-prefork: stating PID-file '%s' failed: %s\n",
 				pid_file, strerror(errno));
 			return -1;
 		}
 
 		/* is it a regular file ? */
 		if (!S_ISREG(st.st_mode)) {
-			fprintf(stderr, "spawn-fcgi: PID-file exists and isn't regular file: '%s'\n",
+			fprintf(stderr, "tcpipc-prefork: PID-file exists and isn't regular file: '%s'\n",
 				pid_file);
 			return -1;
 		}
 
 		if (-1 == (pid_fd = open(pid_file, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH))) {
-			fprintf(stderr, "spawn-fcgi: opening PID-file '%s' failed: %s\n",
+			fprintf(stderr, "tcpipc-prefork: opening PID-file '%s' failed: %s\n",
 				pid_file, strerror(errno));
 			return -1;
 		}
@@ -529,7 +529,7 @@ int main(int argc, char **argv) {
 		return -1;
 
 	if (fcgi_dir && -1 == chdir(fcgi_dir)) {
-		fprintf(stderr, "spawn-fcgi: chdir('%s') failed: %s\n", fcgi_dir, strerror(errno));
+		fprintf(stderr, "tcpipc-prefork: chdir('%s') failed: %s\n", fcgi_dir, strerror(errno));
 		return -1;
 	}
 

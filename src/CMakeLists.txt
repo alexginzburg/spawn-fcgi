@@ -16,7 +16,7 @@ IF(CMAKE_COMPILER_IS_GNUCC)
 	ENDIF(BUILD_EXTRA_WARNINGS)
 ENDIF(CMAKE_COMPILER_IS_GNUCC)
 
-# awk '/#include <(.*)>/ { h = substr($2,2,length($2)-2); h2=toupper(h); gsub("\\.|\\/", "_", h2); printf "%s%s%s%s%s", "CHECK_INCLUDE_FILES(", h, " HAVE_", h2, ")\n" }' spawn-fcgi.c | sort
+# awk '/#include <(.*)>/ { h = substr($2,2,length($2)-2); h2=toupper(h); gsub("\\.|\\/", "_", h2); printf "%s%s%s%s%s", "CHECK_INCLUDE_FILES(", h, " HAVE_", h2, ")\n" }' tcpipc-prefork.c | sort
 CHECK_INCLUDE_FILES(arpa/inet.h HAVE_ARPA_INET_H)
 CHECK_INCLUDE_FILES(errno.h HAVE_ERRNO_H)
 CHECK_INCLUDE_FILES(fcntl.h HAVE_FCNTL_H)
@@ -63,10 +63,10 @@ ADD_DEFINITIONS(-DHAVE_CONFIG_H)
 
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
 
-ADD_EXECUTABLE(spawn-fcgi spawn-fcgi.c)
+ADD_EXECUTABLE(tcpipc-prefork tcpipc-prefork.c)
 
 IF(CMAKE_COMPILER_IS_GNUCC)
-	SET_TARGET_PROPERTIES(spawn-fcgi PROPERTIES COMPILE_FLAGS "-std=gnu99 -Wall -g -Wshadow -W -pedantic -fPIC -D_GNU_SOURCE ${WARN_FLAGS}")
+	SET_TARGET_PROPERTIES(tcpipc-prefork PROPERTIES COMPILE_FLAGS "-std=gnu99 -Wall -g -Wshadow -W -pedantic -fPIC -D_GNU_SOURCE ${WARN_FLAGS}")
 ENDIF(CMAKE_COMPILER_IS_GNUCC)
 
-INSTALL(TARGETS spawn-fcgi DESTINATION bin)
+INSTALL(TARGETS tcpipc-prefork DESTINATION bin)
