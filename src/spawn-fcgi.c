@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <dirent.h>
+#include <limits.h>
 
 #ifdef HAVE_PWD_H
 # include <grp.h>
@@ -223,28 +224,28 @@ static int bind_socket(const char *addr, unsigned short port, const char *unixso
 }
 
 void cleanup_n_leave( int sig ) {
-    int status = 0;
-    char path[513];
-    pid_t child;
+	int status = 0;
+	char path[_POSIX_PATH_MAX];
+	pid_t child;
 
-    if ( (kill(0, sig)) != 0 ) {
-        fprintf( stderr, "Unable to send kill %d to all processes within my process group\n", sig);
-        exit(111);
-    }
+	if ( (kill(0, sig)) != 0 ) {
+		fprintf( stderr, "Unable to send kill %d to all processes within my process group\n", sig);
+		exit(111);
+	}
 
-    for( ;; ) {
-	    if ( (child = wait( &status )) > 0 ) {
-            if ( pid_dir ) {
-                memset(path, '\0', 513);
-                snprintf(path, 512, "%s/%d", pid_dir, child);
-                if ( unlink(path) != 0 ) {
-                    fprintf( stderr, "failed to unlink %s %d", path, errno );
-                }
-            }
-	    } else {
-            if ( errno == ECHILD ) exit(sig);
-        }
-    }
+	for( ;; ) {
+		if ( (child = wait( &status )) > 0 ) {
+			if ( pid_dir ) {
+				memset(path, '\0', _POSIX_PATH_MAX);
+				snprintf(path, _POSIX_PATH_MAX, "%s/%d", pid_dir, child);
+				if ( unlink(path) != 0 ) {
+					fprintf( stderr, "failed to unlink %s %d", path, errno );
+				}
+			}
+		} else {
+			if ( errno == ECHILD ) exit(sig);
+		}
+	}
 }
 
 static int fcgi_spawn_connection(char **appArgv, int fcgi_fd, int fork_count, int nofork) {
@@ -252,117 +253,117 @@ static int fcgi_spawn_connection(char **appArgv, int fcgi_fd, int fork_count, in
 	struct timeval tv = { 0, 100 * 1000 };
 
 	pid_t child;
-    char path[513];
+	char path[_POSIX_PATH_MAX];
 
-  for( ;; ) {
-	while (fork_count > 0) {
+	for( ;; ) {
+		while (fork_count > 0) {
 
-		if (nofork) {
-			child = 0;
-		} else {
-			child = fork();
-		}
-
-		switch (child) {
-		case 0: {
-            int fd = 0;
-
-            if ( pid_dir ) {
-
-                child = getpid();
-                if ( pid_dir ) {
-                    memset(path, '\0', 513);
-                    snprintf(path, 512, "%s/%d", pid_dir, child );
-                    mkfifo( path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP); 
-                }
-
-                if ( (fd = open(path, O_RDONLY|O_NONBLOCK)) == -1 ) {
-                    fprintf( stderr, "failed to open fifo %s %d", path, errno);
-                    exit(errno);
-                }
-
-                /* reassigning to file descriptor 11 */
-                dup2(fd, 11);
-                if ( fd ) close(fd);
-
-                /* write side of the pipe */
-                if ( (fd = open(path, O_WRONLY|O_NONBLOCK)) == -1 ) {
-                    fprintf( stderr, "failed to open fifo %s %d", path, errno);
-                    exit(errno);
-                }
-
-                /* reassigning to file descriptor 12 */
-                dup2(fd, 12);
-                if ( fd ) close(fd);
-            }
-            
-			if(fcgi_fd != FCGI_LISTENSOCK_FILENO) {
-				close(FCGI_LISTENSOCK_FILENO);
-				dup2(fcgi_fd, FCGI_LISTENSOCK_FILENO);
-				close(fcgi_fd);
+			if (nofork) {
+				child = 0;
+			} else {
+				child = fork();
 			}
 
-			if (appArgv) {
-				execv(appArgv[0], appArgv);
-			} 
+			switch (child) {
+			case 0: {
+				int fd = 0;
 
-			/* in nofork mode stderr is still open */
-			fprintf(stderr, "spawn-fcgi: exec failed: %s\n", strerror(errno));
-			exit(errno);
-		}
-		case -1:
+				if ( pid_dir ) {
+
+					child = getpid();
+					if ( pid_dir ) {
+						memset(path, '\0', _POSIX_PATH_MAX);
+						snprintf(path, _POSIX_PATH_MAX, "%s/%d", pid_dir, child );
+						mkfifo( path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP); 
+					}
+
+					if ( (fd = open(path, O_RDONLY|O_NONBLOCK)) == -1 ) {
+						fprintf( stderr, "failed to open fifo %s %d", path, errno);
+						exit(errno);
+					}
+
+					/* reassigning to file descriptor 11 */
+					dup2(fd, 11);
+					if ( fd ) close(fd);
+
+					/* write side of the pipe */
+					if ( (fd = open(path, O_WRONLY|O_NONBLOCK)) == -1 ) {
+						fprintf( stderr, "failed to open fifo %s %d", path, errno);
+						exit(errno);
+					}
+
+					/* reassigning to file descriptor 12 */
+					dup2(fd, 12);
+					if ( fd ) close(fd);
+				}
+
+				if(fcgi_fd != FCGI_LISTENSOCK_FILENO) {
+					close(FCGI_LISTENSOCK_FILENO);
+					dup2(fcgi_fd, FCGI_LISTENSOCK_FILENO);
+					close(fcgi_fd);
+				}
+
+				if (appArgv) {
+					execv(appArgv[0], appArgv);
+				}
+
+				/* in nofork mode stderr is still open */
+				fprintf(stderr, "spawn-fcgi: exec failed: %s\n", strerror(errno));
+				exit(errno);
+			}
+			case -1:
 			/* error */
-			fprintf(stderr, "spawn-fcgi: fork failed: %s\n", strerror(errno));
-			break;
-		default:
+				fprintf(stderr, "spawn-fcgi: fork failed: %s\n", strerror(errno));
+				break;
+			default:
 			/* parent */
 
-			/* wait */
-			select(0, NULL, NULL, NULL, &tv);
+				/* wait */
+				select(0, NULL, NULL, NULL, &tv);
 
-			switch (waitpid(child, &status, WNOHANG)) {
-			case 0:
-			  fork_count--;
-			  fprintf(stdout, "spawn-fcgi: child spawned successfully: PID: %d\n", child);
-			  break;
-			case -1:
-			  break;
-			default:
-				if (WIFEXITED(status)) {
-					fprintf(stderr, "spawn-fcgi: child exited with: %d\n", WEXITSTATUS(status));
-					rc = WEXITSTATUS(status);
-				} else if (WIFSIGNALED(status)) {
-					fprintf(stderr, "spawn-fcgi: child signaled: %d\n", WTERMSIG(status));
-					rc = 1;
-				} else {
-					fprintf(stderr, "spawn-fcgi: child died somehow: exit status = %d\n", status);
-					rc = status;
+				switch (waitpid(child, &status, WNOHANG)) {
+				case 0:
+					fork_count--;
+					fprintf(stdout, "spawn-fcgi: child spawned successfully: PID: %d\n", child);
+					break;
+				case -1:
+					break;
+				default:
+					if (WIFEXITED(status)) {
+						fprintf(stderr, "spawn-fcgi: child exited with: %d\n", WEXITSTATUS(status));
+						rc = WEXITSTATUS(status);
+					} else if (WIFSIGNALED(status)) {
+						fprintf(stderr, "spawn-fcgi: child signaled: %d\n", WTERMSIG(status));
+						rc = 1;
+					} else {
+						fprintf(stderr, "spawn-fcgi: child died somehow: exit status = %d\n", status);
+						rc = status;
+					}
 				}
-			}
 
+				break;
+			}
+		}
+		child = wait( &status );
+		switch( child ) {
+		case 0:
+			break;
+		default:
+			/* one of the child exit, we should spawn a new one */
+			fprintf(stderr, "child %d died somehow: exit status = %d\n", child, status);
+			memset(path, '\0', _POSIX_PATH_MAX);
+			snprintf(path, _POSIX_PATH_MAX, "%s/%d", pid_dir, child);
+			if ( unlink(path) != 0 ) {
+				fprintf( stderr, "failed to unlink %s %d", path, errno );
+			}
+			fork_count++;
 			break;
 		}
 	}
-	child = wait( &status );
-	switch( child ) {
-	case 0:
-	  break;
-	default:
-	  /* one of the child exit, we should spawn a new one */
-	  fprintf(stderr, "child %d died somehow: exit status = %d\n", child, status);
-      memset(path, '\0', 513);
-      snprintf(path, 512, "%s/%d", pid_dir, child);
-      if ( unlink(path) != 0 ) {
-        fprintf( stderr, "failed to unlink %s %d", path, errno );
-      }
-	  fork_count++;
-	  break;
-	}
-  }
 
-  close(fcgi_fd);
+	close(fcgi_fd);
 
-  return rc;
+	return rc;
 }
 
 static int find_user_group(const char *user, const char *group, uid_t *uid, gid_t *gid, const char **username) {
@@ -526,40 +527,40 @@ int main(int argc, char **argv) {
 		return -1;
 	}
 
-    /* sizeof(pid_t) does not really give us what we need... */
-    if ( pid_dir && (strlen(pid_dir) + sizeof(pid_t)) > 512 ) {
-        fprintf( stderr, "path to a pid directory + pid size exceeds 512 bytes, bailing out\n" );
-        return -1;
-    }
+	/* sizeof(pid_t) does not really give us what we need... */
+	if ( pid_dir && (strlen(pid_dir)) > _POSIX_PATH_MAX ) {
+		fprintf( stderr, "path to a pid directory + pid size exceeds _POSIX_PATH_MAX, bailing out\n" );
+		return -1;
+	}
 
-    if ( pid_dir ) {
-        DIR *dp;
-        struct dirent *ep;
-        char rpath[1024];
+	if ( pid_dir ) {
+		DIR *dp;
+		struct dirent *ep;
+		char rpath[_POSIX_PATH_MAX];
 
-        dp = opendir(pid_dir);
-        if ( dp ) {
-            while ( (ep = readdir(dp)) ) {
-                if ( ep->d_name[0] == '.' ) continue;
-                memset(rpath, '\0', 1024);
-                snprintf(rpath, 1023, "%s/%s", pid_dir, ep->d_name);
-                if ( -1 == unlink(rpath) ) {
-                    switch( errno ) {
-                    case ENOENT:
-                        break;
-                    default:
-                        fprintf( stderr, "failed to remove %s\n", ep->d_name );
-                        (void) closedir(dp);
-                        return -1;
-                    }
-                }
-            }
-            (void) closedir(dp);
-        } else {
-            fprintf( stderr, "cannot open %s\n", pid_dir ); 
-            return -1;
-        }
-    }
+		dp = opendir(pid_dir);
+		if ( dp ) {
+			while ( (ep = readdir(dp)) ) {
+				if ( ep->d_name[0] == '.' ) continue;
+				memset(rpath, '\0', _POSIX_PATH_MAX);
+				snprintf(rpath, _POSIX_PATH_MAX, "%s/%s", pid_dir, ep->d_name);
+				if ( -1 == unlink(rpath) ) {
+					switch( errno ) {
+					case ENOENT:
+						break;
+					default:
+						fprintf( stderr, "failed to remove %s\n", ep->d_name );
+							(void) closedir(dp);
+							return -1;
+					}
+				}
+			}
+			(void) closedir(dp);
+		} else {
+			fprintf( stderr, "cannot open %s\n", pid_dir ); 
+			return -1;
+		}
+	}
 
 	if (0 == port && NULL == unixsocket) {
 		fprintf(stderr, "spawn-fcgi: no socket given (use either -p or -s)\n");
@@ -640,9 +641,9 @@ int main(int argc, char **argv) {
 		return -1;
 	}
 
-    signal(SIGTERM, cleanup_n_leave);
-    signal(SIGINT, cleanup_n_leave);
-    signal(SIGABRT, cleanup_n_leave);
+	signal(SIGTERM, cleanup_n_leave);
+	signal(SIGINT, cleanup_n_leave);
+	signal(SIGABRT, cleanup_n_leave);
 
 	return fcgi_spawn_connection(fcgi_app_argv, fcgi_fd, fork_count, nofork);
 }
