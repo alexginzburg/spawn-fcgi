@@ -644,6 +644,7 @@ int main(int argc, char **argv) {
 	signal(SIGTERM, cleanup_n_leave);
 	signal(SIGINT, cleanup_n_leave);
 	signal(SIGABRT, cleanup_n_leave);
+	signal(SIGHUP, cleanup_n_leave);
 
 	return fcgi_spawn_connection(fcgi_app_argv, fcgi_fd, fork_count, nofork);
 }
