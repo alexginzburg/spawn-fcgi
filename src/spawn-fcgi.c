@@ -351,10 +351,12 @@ static int fcgi_spawn_connection(char **appArgv, int fcgi_fd, int fork_count, in
 		default:
 			/* one of the child exit, we should spawn a new one */
 			fprintf(stderr, "child %d died somehow: exit status = %d\n", child, status);
-			memset(path, '\0', _POSIX_PATH_MAX);
-			snprintf(path, _POSIX_PATH_MAX, "%s/%d", pid_dir, child);
-			if ( unlink(path) != 0 ) {
-				fprintf( stderr, "failed to unlink %s %d", path, errno );
+			if ( pid_dir ) {
+				memset(path, '\0', _POSIX_PATH_MAX);
+				snprintf(path, _POSIX_PATH_MAX, "%s/%d", pid_dir, child);
+				if ( unlink(path) != 0 ) {
+					fprintf( stderr, "failed to unlink %s %d", path, errno );
+				}
 			}
 			fork_count++;
 			break;
